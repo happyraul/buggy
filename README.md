@@ -3,8 +3,9 @@ Creepy crawlies
 
 Requirements:
 
-  pip install selenium
+    pip install selenium
 
 Run it:
 
-  python ita.py
+    python ita.py
+
