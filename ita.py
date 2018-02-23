@@ -12,47 +12,50 @@ def get_driver():
     options = _sel.Options()
     options.add_argument('-headless')
     driver = _sel.Firefox(executable_path='geckodriver', firefox_options=options)
-    wait = _sel.WebDriverWait(driver, timeout=60)
-    return driver, wait
+    return driver
 
 
 def search(origin, destination, departure_date, return_date):
-	driver, wait = get_driver()
+	print('Creating driver...')
+	driver = get_driver()
 	url = 'https://matrix.itasoftware.com/'
+	print(f'Loading {url}...')
 	driver.get(url)
 
-	send_keys(wait, 'cityPair-orig-0', origin)
-	click_suggestion(origin, wait)
-	driver.get_screenshot_as_file('01-origin.png')
+	send_keys(driver, 'cityPair-orig-0', origin, timeout=5)
+	click_suggestion(driver, origin)
+	send_keys(driver, 'cityPair-dest-0', destination)
+	click_suggestion(driver, destination)
 
-	send_keys(wait, 'cityPair-dest-0', destination)
-	click_suggestion(destination, wait)
-	driver.get_screenshot_as_file('02-destination.png')
+	send_keys(driver, 'cityPair-outDate-0', departure_date)
+	send_keys(driver, 'cityPair-retDate-0', return_date)
 
-	send_keys(wait, 'cityPair-outDate-0', departure_date)
-	driver.get_screenshot_as_file('03-dep-date.png')
-	send_keys(wait, 'cityPair-retDate-0', return_date)
-	driver.get_screenshot_as_file('04-ret-date.png')
+	driver.find_element_by_id('searchButton-0').click()
+	print(f'Searching for {origin} to {destination} - '
+		  f'departing {departure_date}, returning {return_date}...')
 
-	wait.until(_sel.expected.visibility_of_element_located(
-		(_sel.By.ID, 'searchButton-0')
-	)).click()
-	driver.get_screenshot_as_file('05-search-start.png')
-
+	wait = _sel.WebDriverWait(driver, timeout=60)
 	wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
 		(_sel.By.CLASS_NAME, 'IR6M2QD-n-c')
 	)(driver))
-	driver.get_screenshot_as_file('06-search-end.png')
+	driver.get_screenshot_as_file('01-search-end.png')
 
-	driver.get_screenshot_as_file('07-matrix.png')
-	return driver, wait
-
-
-def send_keys(wait, id_, value):
-	wait.until(_sel.expected.visibility_of_element_located((_sel.By.ID, id_))).send_keys(value)
+	return driver
 
 
-def click_suggestion(input_, wait):
+def send_keys(driver, id_, value, timeout=None):
+	if timeout:
+		wait = _sel.WebDriverWait(driver, timeout=timeout)
+		expectation = _sel.expected.visibility_of_element_located((_sel.By.ID, id_))
+		field = wait.until(expectation)
+	else:
+		field = driver.find_element_by_id(id_)
+
+	field.send_keys(value)
+
+
+def click_suggestion(driver, input_):
+	wait = _sel.WebDriverWait(driver, timeout=5)
 	suggestions = wait.until(_sel.expected.visibility_of_element_located(
 		(_sel.By.CLASS_NAME, 'gwt-SuggestBoxPopup')
 	))
@@ -63,17 +66,18 @@ def click_suggestion(input_, wait):
 			break
 
 if __name__ == "__main__":
-    options = _sel.Options()
-    options.add_argument('-headless')
-    driver = _sel.Firefox(executable_path='geckodriver', firefox_options=options)
-    wait = _sel.WebDriverWait(driver, timeout=10)
-    driver.get('https://www.google.com/')
-    wait.until(_sel.expected.visibility_of_element_located((_sel.By.NAME, 'q'))).send_keys(
-    	'headless firefox' + _sel.Keys.ENTER
-    )
-    wait.until(_sel.expected.visibility_of_element_located((_sel.By.CSS_SELECTOR, '#ires a'))).click()
-    print(driver.page_source[:60])
-    driver.quit()
+	search('BOS', 'AMS', '03/14/2018', '03/25/2018')
+    # options = _sel.Options()
+    # options.add_argument('-headless')
+    # driver = _sel.Firefox(executable_path='geckodriver', firefox_options=options)
+    # wait = _sel.WebDriverWait(driver, timeout=10)
+    # driver.get('https://www.google.com/')
+    # wait.until(_sel.expected.visibility_of_element_located((_sel.By.NAME, 'q'))).send_keys(
+    # 	'headless firefox' + _sel.Keys.ENTER
+    # )
+    # wait.until(_sel.expected.visibility_of_element_located((_sel.By.CSS_SELECTOR, '#ires a'))).click()
+    # print(driver.page_source[:60])
+    # driver.quit()
 
     # wait.until(_sel.expected.visibility_of_element_located((_sel.By.ID, 'cityPair-orig-0'))).send_keys('BOS')
     # wait.until(_sel.expected.visibility_of_element_located((_sel.By.ID, 'cityPair-dest-0'))).send_keys('AMS')
