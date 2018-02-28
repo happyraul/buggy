@@ -1,19 +1,87 @@
+import datetime as _dt
 import re as _re
 
 class _sel():
-    from selenium.webdriver import Firefox
+    from selenium.webdriver import Firefox, Chrome
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.firefox.options import Options
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
     from selenium.webdriver.support import expected_conditions as expected
     from selenium.webdriver.support.wait import WebDriverWait
 
 
 def get_driver():
-    options = _sel.Options()
+    options = _sel.FirefoxOptions()
     options.add_argument('-headless')
     driver = _sel.Firefox(executable_path='geckodriver', firefox_options=options)
     return driver
+
+
+def get_chrome_driver():
+    options = _sel.ChromeOptions()
+    options.add_argument('-headless')
+    # options.binary_location = '/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome'
+    driver = _sel.Chrome(executable_path='chromedriver', chrome_options=options)
+    driver.set_window_size(1600, 1600)
+    return driver
+
+
+def search_db(origin, destination, departure_date=None, driver=None):
+    if driver is None:
+        print('Creating driver...')
+        driver = get_chrome_driver()
+
+    print('Getting bahn.de...')
+    driver.get('https://bahn.de')
+    send_keys(driver, origin, id_='js-auskunft-autocomplete-from', timeout=6)
+    send_keys(driver, destination, id_='js-auskunft-autocomplete-to')
+    driver.find_element_by_id('0').click()
+
+    if departure_date:
+        send_keys(driver, departure_date, name='date', clear=True)
+        driver.get_screenshot_as_file('000-db.png')
+        driver.find_element_by_id('js-auskunft-autocomplete-from').click()
+        time_field = driver.find_element_by_name('time')
+        for _ in range(5):
+            time_field.send_keys(_sel.Keys.BACK_SPACE)
+        driver.get_screenshot_as_file('000-db-back.png')
+        send_keys(driver, '14:00', name='time')
+
+    print('Submitting...')
+    driver.get_screenshot_as_file('001-db.png')
+    driver.find_element_by_class_name('js-submit-btn').click()
+    driver.get_screenshot_as_file('002-db.png')
+
+    print('Waiting for page to load...')
+    wait = _sel.WebDriverWait(driver, timeout=15)
+    later_btn = wait.until(_sel.expected.visibility_of_element_located(
+        (_sel.By.CLASS_NAME, 'later')
+    ))
+    results = driver.find_element_by_class_name('resultContentHolder')
+    for i in range(3):
+        later_btn = driver.find_element_by_class_name('later')
+        # with open(f'00{i}-db-search-results.png', 'wb') as file:
+        #     file.write(results.screenshot_as_png())
+
+        later_btn.click()
+
+    driver.get_screenshot_as_file('003-db.png')
+
+    results = []
+    for result in driver.find_elements_by_class_name('boxShadow'):
+        results.append(dict(
+            departure_time=result.find_element_by_xpath(
+                "//tr[@class='firstrow']/td[@class='time']").text.strip(),
+            duration=result.find_element_by_xpath(
+                "//tr[@class='firstrow']/td[contains(@class, 'duration') and contains(@class, 'lastrow')]"
+            ).text.strip(),
+            price=result.find_element_by_xpath(
+                "//tr[@class='firstrow']/td/span[@class='fareOutput']"
+            ).text.strip()
+        ))
+
+    return driver, results
 
 
 def search(origin, destination, departure_date, return_date, driver=None):
@@ -132,14 +200,21 @@ def is_layover(row):
     return row and 'Layover' in row
 
 
-def send_keys(driver, id_, value, timeout=None):
+def send_keys(driver, value, id_=None, name=None, timeout=None, clear=False):
     if timeout:
         wait = _sel.WebDriverWait(driver, timeout=timeout)
-        expectation = _sel.expected.visibility_of_element_located((_sel.By.ID, id_))
+        selector = _sel.By.ID if id_ else _sel.By.NAME
+        expectation = _sel.expected.visibility_of_element_located((selector,
+                                                                   id_ or name))
         field = wait.until(expectation)
     else:
-        field = driver.find_element_by_id(id_)
+        if id_:
+            field = driver.find_element_by_id(id_)
+        else:
+            field = driver.find_element_by_name(name)
 
+    if clear:
+        field.clear()
     field.send_keys(value)
 
 
