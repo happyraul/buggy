@@ -1,5 +1,8 @@
-import datetime as _dt
+
 import re as _re
+
+import common as _common
+
 
 class _sel():
     from selenium.webdriver import Firefox, Chrome
@@ -11,26 +14,10 @@ class _sel():
     from selenium.webdriver.support.wait import WebDriverWait
 
 
-def get_driver():
-    options = _sel.FirefoxOptions()
-    options.add_argument('-headless')
-    driver = _sel.Firefox(executable_path='geckodriver', firefox_options=options)
-    return driver
-
-
-def get_chrome_driver():
-    options = _sel.ChromeOptions()
-    options.add_argument('-headless')
-    # options.binary_location = '/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome'
-    driver = _sel.Chrome(executable_path='chromedriver', chrome_options=options)
-    driver.set_window_size(1600, 1600)
-    return driver
-
-
 def search_db(origin, destination, departure_date=None, driver=None):
     if driver is None:
         print('Creating driver...')
-        driver = get_chrome_driver()
+        driver = _common.get_chrome_driver()
 
     print('Getting bahn.de...')
     driver.get('https://bahn.de')
@@ -70,15 +57,15 @@ def search_db(origin, destination, departure_date=None, driver=None):
 
     results = []
     for result in driver.find_elements_by_class_name('boxShadow'):
+        print(result.text)
         results.append(dict(
             departure_time=result.find_element_by_xpath(
-                "//tr[@class='firstrow']/td[@class='time']").text.strip(),
+                "tr[@class='firstrow']/td[@class='time']").text.strip(),
             duration=result.find_element_by_xpath(
-                "//tr[@class='firstrow']/td[contains(@class, 'duration') and contains(@class, 'lastrow')]"
+                "tr[@class='firstrow']/td[contains(@class, 'duration') and "
+                "contains(@class, 'lastrow')]"
             ).text.strip(),
-            price=result.find_element_by_xpath(
-                "//tr[@class='firstrow']/td/span[@class='fareOutput']"
-            ).text.strip()
+            price=result.find_element_by_class_name('fareOutput').text.strip()
         ))
 
     return driver, results
@@ -87,7 +74,7 @@ def search_db(origin, destination, departure_date=None, driver=None):
 def search(origin, destination, departure_date, return_date, driver=None):
     if driver is None:
         print('Creating driver...')
-        driver = get_driver()
+        driver = _common.get_firefox_driver()
 
     url = 'https://matrix.itasoftware.com/'
     print(f'Loading `{url}`...')
@@ -141,7 +128,7 @@ def search(origin, destination, departure_date, return_date, driver=None):
 
 def get_buttons(driver):
     return [button
-            for button in driver.find_elements_by_xpath('//div/button/span') 
+            for button in driver.find_elements_by_xpath('//div/button/span')
             if button.text]
 
 
@@ -168,7 +155,7 @@ def parse_leg(leg):
         if extra and is_layover(extra.text):
             data['layover'] = parse_layover(extra)
         segments.append(data)
-    return segments 
+    return segments
 
 
 def parse_schedule(row):
@@ -180,7 +167,7 @@ def parse_schedule(row):
         depart=depart.split('Dep: ')[1],
         arrive=arrive.split('Arr: ')[1],
         duration=duration,
-        aircraft=aircraft, 
+        aircraft=aircraft,
         booking_code=booking_code,
     )
 
