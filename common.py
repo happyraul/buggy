@@ -11,7 +11,7 @@ class _sel():
     from selenium.webdriver.support.wait import WebDriverWait
 
 
-def get_driver(browser):
+def get_driver(browser, height=1600, width=1600):
     """Create a chrome or firefox driver"""
     options_cls = getattr(_sel, f'{browser.capitalize()}Options')
     driver_cls = getattr(_sel, browser.capitalize())
@@ -24,7 +24,7 @@ def get_driver(browser):
         f'{browser.lower()}_options': options
     }
     driver = driver_cls(**kwargs)
-    driver.set_window_size(1600, 1600)
+    driver.set_window_size(width, height)
     return driver
 
 

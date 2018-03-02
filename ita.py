@@ -1,4 +1,5 @@
 
+import functools as _ft
 import re as _re
 
 import common as _common
@@ -14,19 +15,22 @@ class _sel():
 def search(origin, destination, departure_date, return_date, driver=None):
     if driver is None:
         print('Creating driver...')
-        driver = _common.get_firefox_driver()
+        driver = _common.get_firefox_driver(width=1280)
+    send_keys = _ft.partial(_common.send_keys, driver)
 
     url = 'https://matrix.itasoftware.com/'
     print(f'Loading `{url}`...')
     driver.get(url)
+    driver.get_screenshot_as_file('000-ita-load.png')
+    # return driver, '', ''
 
-    send_keys(driver, 'cityPair-orig-0', origin, timeout=6)
+    send_keys(origin, id_='cityPair-orig-0', timeout=7)
     click_suggestion(driver, origin)
-    send_keys(driver, 'cityPair-dest-0', destination)
+    send_keys(destination, id_='cityPair-dest-0')
     click_suggestion(driver, destination)
 
-    send_keys(driver, 'cityPair-outDate-0', departure_date)
-    send_keys(driver, 'cityPair-retDate-0', return_date)
+    send_keys(departure_date, id_='cityPair-outDate-0')
+    send_keys(return_date, id_='cityPair-retDate-0')
 
     driver.find_element_by_id('searchButton-0').click()
     print(f'Searching for `{origin}` to `{destination}` - '
@@ -41,28 +45,31 @@ def search(origin, destination, departure_date, return_date, driver=None):
 
     details = []
     divs = []
-    # buttons = get_buttons(driver)
     for idx in range(1):
-        # buttons = get_buttons(driver)
         button = get_buttons(driver)[idx]
         price = button.text
         print(f'Retrieving itinerary details for `{price}`...')
         button.click()
 
-        wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
-            (_sel.By.XPATH, '//div[contains(text(), "Retrieving itinerary details")]')
-        )(driver))
+        wait.until(
+            lambda driver: not _sel.expected.visibility_of_element_located((
+                _sel.By.XPATH,
+                '//div[contains(text(), "Retrieving itinerary details")]'
+            ))(driver))
+
         driver.get_screenshot_as_file(f'003-{idx}-details.png')
-        # return driver, '', ''
         div, parsed = parse_details(driver)
         parsed['price'] = price
         details.append(parsed)
         divs.append(div)
         driver.back()
 
-        wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
-            (_sel.By.XPATH, '//div[contains(text(), "Updating flight info")]')
-        )(driver))
+        wait.until(
+            lambda driver: not _sel.expected.visibility_of_element_located((
+                _sel.By.XPATH,
+                '//div[contains(text(), "Updating flight info")]'
+            ))(driver)
+        )
     return driver, divs, details
 
 
@@ -73,13 +80,18 @@ def get_buttons(driver):
 
 
 def parse_details(driver):
-    details_div = driver.find_element_by_xpath('//div[contains(text(), "Itinerary")]/following-sibling::div')
-    out, return_ = map(parse_leg, details_div.find_elements_by_tag_name('table'))
+    details_div = driver.find_element_by_xpath(
+        '//div[contains(text(), "Itinerary")]/following-sibling::div'
+    )
+    out, return_ = map(parse_leg,
+                       details_div.find_elements_by_tag_name('table'))
     return details_div, {'out': out, 'return': return_}
 
 
 def parse_leg(leg):
-    pattern = _re.compile('^.+\((?P<origin>[A-Z]{3})\).+\((?P<destination>[A-Z]{3})\)')
+    pattern = _re.compile(
+        '^.+\((?P<origin>[A-Z]{3})\).+\((?P<destination>[A-Z]{3})\)'
+    )
     rows = leg.find_elements_by_tag_name('tr')[1:]
     segments = []
     for segment in [iter(rows[i:i + 3]) for i in range(0, len(rows), 3)]:
@@ -111,8 +123,11 @@ def parse_schedule(row):
         booking_code=booking_code,
     )
 
+
 def parse_layover(row):
-    layover = iter([td.text for td in row.find_elements_by_tag_name('td') if td.text])
+    layover = iter([
+        td.text for td in row.find_elements_by_tag_name('td') if td.text
+    ])
     data = next(layover)
     while data:
         if is_layover(data):
@@ -137,6 +152,7 @@ def click_suggestion(driver, input_):
         if f'({input_})' in suggestion.text:
             suggestion.click()
             break
+
 
 if __name__ == "__main__":
     import pprint as _pp
