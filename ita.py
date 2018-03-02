@@ -1,8 +1,24 @@
 
+import decimal as _decimal
 import functools as _ft
 import re as _re
 
 import common as _common
+
+
+class Price():
+    def __init__(self, price):
+        print(price)
+        pattern = _re.compile(r'^(?P<currency>[^\d]+)(?P<amount>.+)')
+        self._price = price
+        price = price.replace(',', '')
+        match = _re.search(pattern, price)
+        if match:
+            self.currency = match.group('currency')
+            self.amount = _decimal.Decimal(match.group('amount'))
+
+    def __repr__(self):
+        return f'{self.currency}{self.amount}'
 
 
 class _sel():
@@ -21,8 +37,7 @@ def search(origin, destination, departure_date, return_date, driver=None):
     url = 'https://matrix.itasoftware.com/'
     print(f'Loading `{url}`...')
     driver.get(url)
-    driver.get_screenshot_as_file('000-ita-load.png')
-    # return driver, '', ''
+    # driver.get_screenshot_as_file('000-ita-load.png')
 
     send_keys(origin, id_='cityPair-orig-0', timeout=7)
     click_suggestion(driver, origin)
@@ -46,6 +61,7 @@ def search(origin, destination, departure_date, return_date, driver=None):
     details = []
     divs = []
     for idx in range(1):
+        driver.get_screenshot_as_file('003-ita-before-details-click.png')
         button = get_buttons(driver)[idx]
         price = button.text
         print(f'Retrieving itinerary details for `{price}`...')
@@ -57,11 +73,12 @@ def search(origin, destination, departure_date, return_date, driver=None):
                 '//div[contains(text(), "Retrieving itinerary details")]'
             ))(driver))
 
-        driver.get_screenshot_as_file(f'003-{idx}-details.png')
+        driver.get_screenshot_as_file(f'004-ita-{idx}-details.png')
         div, parsed = parse_details(driver)
-        parsed['price'] = price
+        parsed['price'] = Price(price)
         details.append(parsed)
         divs.append(div)
+        return driver, divs, details
         driver.back()
 
         wait.until(
@@ -85,57 +102,103 @@ def parse_details(driver):
     )
     out, return_ = map(parse_leg,
                        details_div.find_elements_by_tag_name('table'))
-    return details_div, {'out': out, 'return': return_}
+
+    fare_details = driver.find_element_by_xpath(
+        '//div[contains(text(), "How to buy this ticket")]/'
+        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
+        'table/tbody/tr/following-sibling::tr/td/table/tbody'
+    )
+    fare = dict(base_fares=[])
+
+    for tr in fare_details.find_elements_by_xpath('tr'):
+        if is_base_fare(tr):
+            fare['base_fares'].append(parse_base_fare(tr))
+
+    return details_div, {'out': out, 'return': return_, 'fare': fare}
+
+
+def is_base_fare(element):
+    return element and '(rules)' in element.text
+
+
+def parse_base_fare(element):
+    base_fare_description = [
+        part.text for part in element.find_elements_by_xpath('td/table//td')
+    ]
+    return dict(
+        description=', '.join(base_fare_description),
+        price=Price(element.find_element_by_xpath('td/div').text)
+    )
 
 
 def parse_leg(leg):
-    pattern = _re.compile(
-        '^.+\((?P<origin>[A-Z]{3})\).+\((?P<destination>[A-Z]{3})\)'
-    )
-    rows = leg.find_elements_by_tag_name('tr')[1:]
+    rows = leg.find_elements_by_tag_name('tr')
     segments = []
-    for segment in [iter(rows[i:i + 3]) for i in range(0, len(rows), 3)]:
-        route = next(segment).find_element_by_tag_name('div').text
-        match = _re.search(pattern, route)
-        data = {}
-        if match:
-            data['origin'] = match.group('origin')
-            data['destination'] = match.group('destination')
+    data = {}
 
-        data.update(parse_schedule(next(segment)))
-        extra = next(segment, None)
-        if extra and is_layover(extra.text):
-            data['layover'] = parse_layover(extra)
-        segments.append(data)
+    for row in rows:
+        if 'flight' not in data:
+            data.update(parse_route(row))
+            data.update(parse_schedule(row))
+        elif is_route(row):
+            segments.append(data)
+            data = {}
+            data.update(parse_route(row))
+        else:
+            data.update(parse_layover(row))
+    segments.append(data)
+
     return segments
 
 
-def parse_schedule(row):
-    flight, depart, arrive, duration, aircraft, booking_code = [
-        td.text for td in row.find_elements_by_tag_name('td') if td.text
-    ]
-    return dict(
-        flight=flight,
-        depart=depart.split('Dep: ')[1],
-        arrive=arrive.split('Arr: ')[1],
-        duration=duration,
-        aircraft=aircraft,
-        booking_code=booking_code,
+def is_route(row):
+    pattern = _re.compile(
+        '^.+\((?P<origin>[A-Z]{3})\).+\((?P<destination>[A-Z]{3})\)'
     )
+    route = row.find_element_by_tag_name('div').text
+    return _re.search(pattern, route)
+
+
+def parse_route(row):
+    data = {}
+    match = is_route(row)
+    if match:
+        data['origin'] = match.group('origin')
+        data['destination'] = match.group('destination')
+    return data
+
+
+def parse_schedule(row):
+    parsed = {}
+    data = [td.text for td in row.find_elements_by_tag_name('td') if td.text]
+    if len(data) == 6:
+        flight, depart, arrive, duration, aircraft, booking_code = data
+        parsed.update(dict(
+            flight=flight,
+            depart=depart.split('Dep: ')[1],
+            arrive=arrive.split('Arr: ')[1],
+            duration=duration,
+            aircraft=aircraft,
+            booking_code=booking_code,
+        ))
+    return parsed
 
 
 def parse_layover(row):
-    layover = iter([
-        td.text for td in row.find_elements_by_tag_name('td') if td.text
-    ])
-    data = next(layover)
-    while data:
-        if is_layover(data):
-            key = data.split('Layover in ')[1]
-        else:
-            value = data
-        data = next(layover, None)
-    return {key: value}
+    parsed = {}
+    if is_layover(row.text):
+        layover = iter([
+            td.text for td in row.find_elements_by_tag_name('td') if td.text
+        ])
+        data = next(layover)
+        while data:
+            if is_layover(data):
+                key = data.split('Layover in ')[1]
+            else:
+                value = data
+            data = next(layover, None)
+        parsed['layover'] = {key: value}
+    return parsed
 
 
 def is_layover(row):
