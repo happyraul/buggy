@@ -8,7 +8,6 @@ import common as _common
 
 class Price():
     def __init__(self, price):
-        print(price)
         pattern = _re.compile(r'^(?P<currency>[^\d]+)(?P<amount>.+)')
         self._price = price
         price = price.replace(',', '')
@@ -16,6 +15,17 @@ class Price():
         if match:
             self.currency = match.group('currency')
             self.amount = _decimal.Decimal(match.group('amount'))
+
+    def __add__(self, other):
+        assert self.currency == other.currency, 'Currency should be the same between prices.'
+        return Price(f'{self.currency}{self.amount + other.amount}')
+
+    def __radd__(self, other):
+        if other == 0:
+            return self
+        else:
+            assert self.currency == other.currency, 'Currency should be the same between prices.'
+            return self + other
 
     def __repr__(self):
         return f'{self.currency}{self.amount}'
@@ -51,12 +61,11 @@ def search(origin, destination, departure_date, return_date, driver=None):
     print(f'Searching for `{origin}` to `{destination}` - '
           f'departing `{departure_date}`, returning `{return_date}`...')
 
-    # driver.get_screenshot_as_file('001-search-begin.png')
+    driver.get_screenshot_as_file('001-ita-search-begin.png')
     wait = _sel.WebDriverWait(driver, timeout=60)
     wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
         (_sel.By.XPATH, '//div[contains(text(), "Searching for flights")]')
     )(driver))
-    # driver.get_screenshot_as_file('002-search-end.png')
 
     details = []
     divs = []
@@ -103,32 +112,49 @@ def parse_details(driver):
     out, return_ = map(parse_leg,
                        details_div.find_elements_by_tag_name('table'))
 
-    fare_details = driver.find_element_by_xpath(
-        '//div[contains(text(), "How to buy this ticket")]/'
-        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
-        'table/tbody/tr/following-sibling::tr/td/table/tbody'
-    )
-    fare = dict(base_fares=[])
+    
+    base_fares = parse_base_fares(driver)
+    fat = parse_fat(driver)
 
-    for tr in fare_details.find_elements_by_xpath('tr'):
-        if is_base_fare(tr):
-            fare['base_fares'].append(parse_base_fare(tr))
+    fare = dict(base_fares=base_fares, base_fare_total=sum(fare['price'] for fare in base_fares),
+                fat=fat, fat_total=sum(surcharge['price'] for surcharge in fat))
 
     return details_div, {'out': out, 'return': return_, 'fare': fare}
 
 
-def is_base_fare(element):
-    return element and '(rules)' in element.text
-
-
-def parse_base_fare(element):
-    base_fare_description = [
-        part.text for part in element.find_elements_by_xpath('td/table//td')
-    ]
-    return dict(
-        description=', '.join(base_fare_description),
-        price=Price(element.find_element_by_xpath('td/div').text)
+def parse_base_fares(driver):
+    details = driver.find_element_by_xpath(
+        '//div[contains(text(), "How to buy this ticket")]/'
+        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
+        'table/tbody/tr/following-sibling::tr/td/table/tbody'
     )
+    base_fares = []
+    for tr in details.find_elements_by_xpath('tr'):
+        print(tr.text)
+        if tr and '(rules)' in tr.text:
+            description = [
+                part.text for part in tr.find_elements_by_xpath('td/table//td')
+            ]
+            base_fares.append(dict(
+                description=', '.join(description),
+                price=Price(tr.find_element_by_xpath('td/div').text)
+            ))
+    return base_fares
+
+
+def parse_fat(driver):
+    details = driver.find_element_by_xpath(
+        '//div[contains(text(), "How to buy this ticket")]/'
+        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
+        'table/tbody/tr/following-sibling::tr/td/table/tbody'
+    )
+    surcharges = []
+    for tr in details.find_element_by_xpath('tr'):
+        # print(tr.text)
+        if tr and ('(YQ)' in tr.text or '(YR)' in tr.text):
+            description, price = tr.text.split('\n')
+            surcharges.append(dict(description=description, price=Price(price)))
+    return surcharges
 
 
 def parse_leg(leg):
