@@ -112,7 +112,7 @@ def parse_details(driver):
     out, return_ = map(parse_leg,
                        details_div.find_elements_by_tag_name('table'))
 
-    
+
     base_fares = parse_base_fares(driver)
     fat = parse_fat(driver)
 
