@@ -112,9 +112,14 @@ def parse_details(driver):
     out, return_ = map(parse_leg,
                        details_div.find_elements_by_tag_name('table'))
 
+    details = driver.find_element_by_xpath(
+        '//div[contains(text(), "How to buy this ticket")]/'
+        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
+        'table/tbody/tr/following-sibling::tr/td/table/tbody'
+    )
 
-    base_fares = parse_base_fares(driver)
-    fat = parse_fat(driver)
+    base_fares = parse_base_fares(details)
+    fat = parse_fat(details)
 
     fare = dict(base_fares=base_fares, base_fare_total=sum(fare['price'] for fare in base_fares),
                 fat=fat, fat_total=sum(surcharge['price'] for surcharge in fat))
@@ -122,15 +127,9 @@ def parse_details(driver):
     return details_div, {'out': out, 'return': return_, 'fare': fare}
 
 
-def parse_base_fares(driver):
-    details = driver.find_element_by_xpath(
-        '//div[contains(text(), "How to buy this ticket")]/'
-        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
-        'table/tbody/tr/following-sibling::tr/td/table/tbody'
-    )
+def parse_base_fares(details):
     base_fares = []
     for tr in details.find_elements_by_xpath('tr'):
-        print(tr.text)
         if tr and '(rules)' in tr.text:
             description = [
                 part.text for part in tr.find_elements_by_xpath('td/table//td')
@@ -142,15 +141,9 @@ def parse_base_fares(driver):
     return base_fares
 
 
-def parse_fat(driver):
-    details = driver.find_element_by_xpath(
-        '//div[contains(text(), "How to buy this ticket")]/'
-        'following-sibling::div/following-sibling::div/table/tbody/tr/td/'
-        'table/tbody/tr/following-sibling::tr/td/table/tbody'
-    )
+def parse_fat(details):
     surcharges = []
-    for tr in details.find_element_by_xpath('tr'):
-        # print(tr.text)
+    for tr in details.find_elements_by_xpath('tr'):
         if tr and ('(YQ)' in tr.text or '(YR)' in tr.text):
             description, price = tr.text.split('\n')
             surcharges.append(dict(description=description, price=Price(price)))
