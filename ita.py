@@ -17,14 +17,16 @@ class Price():
             self.amount = _decimal.Decimal(match.group('amount'))
 
     def __add__(self, other):
-        assert self.currency == other.currency, 'Currency should be the same between prices.'
+        assert self.currency == other.currency, \
+            'Currency should be the same between prices.'
         return Price(f'{self.currency}{self.amount + other.amount}')
 
     def __radd__(self, other):
         if other == 0:
             return self
         else:
-            assert self.currency == other.currency, 'Currency should be the same between prices.'
+            assert self.currency == other.currency, \
+                'Currency should be the same between prices.'
             return self + other
 
     def __repr__(self):
@@ -121,8 +123,10 @@ def parse_details(driver):
     base_fares = parse_base_fares(details)
     fat = parse_fat(details)
 
-    fare = dict(base_fares=base_fares, base_fare_total=sum(fare['price'] for fare in base_fares),
-                fat=fat, fat_total=sum(surcharge['price'] for surcharge in fat))
+    fare = dict(base_fares=base_fares,
+                base_fare_total=sum(fare['price'] for fare in base_fares),
+                fat=fat,
+                fat_total=sum(surcharge['price'] for surcharge in fat))
 
     return details_div, {'out': out, 'return': return_, 'fare': fare}
 
@@ -146,7 +150,8 @@ def parse_fat(details):
     for tr in details.find_elements_by_xpath('tr'):
         if tr and ('(YQ)' in tr.text or '(YR)' in tr.text):
             description, price = tr.text.split('\n')
-            surcharges.append(dict(description=description, price=Price(price)))
+            surcharges.append(dict(description=description,
+                                   price=Price(price)))
     return surcharges
 
 
