@@ -21,6 +21,16 @@ class Price():
             'Currency should be the same between prices.'
         return Price(f'{self.currency}{self.amount + other.amount}')
 
+    def __sub__(self, other):
+        assert self.currency == other.currency, \
+            'Currency should be the same between prices.'
+        return Price(f'{self.currency}{self.amount - other.amount}')
+
+    def __truediv__(self, other):
+        assert self.currency == other.currency, \
+            'Currency should be the same between prices.'
+        return self.amount / other.amount
+
     def __radd__(self, other):
         if other == 0:
             return self
@@ -40,7 +50,8 @@ class _sel():
     from selenium.webdriver.support.wait import WebDriverWait
 
 
-def search(origin, destination, departure_date, return_date, driver=None):
+def search(origin, destination, departure_date, return_date, num_details=5,
+           driver=None):
     if driver is None:
         print('Creating driver...')
         driver = _common.get_firefox_driver(width=1280)
@@ -65,39 +76,54 @@ def search(origin, destination, departure_date, return_date, driver=None):
 
     driver.get_screenshot_as_file('001-ita-search-begin.png')
     wait = _sel.WebDriverWait(driver, timeout=60)
-    wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
-        (_sel.By.XPATH, '//div[contains(text(), "Searching for flights")]')
-    )(driver))
+    try:
+        wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
+            (_sel.By.XPATH, '//div[contains(text(), "Searching for flights")]')
+        )(driver))
+    except Exception:
+        driver.get_screenshot_as_file('xxx-ita-timeout.png')
+        raise
+
+    buttons = get_buttons(driver)
+    limit = min(len(buttons) - 1, num_details)
+    print(f'Gonna get details for `{limit}` itineraries')
 
     details = []
     divs = []
-    for idx in range(1):
+    for idx in range(limit):
         driver.get_screenshot_as_file('003-ita-before-details-click.png')
         button = get_buttons(driver)[idx]
         price = button.text
         print(f'Retrieving itinerary details for `{price}`...')
         button.click()
-
-        wait.until(
-            lambda driver: not _sel.expected.visibility_of_element_located((
-                _sel.By.XPATH,
-                '//div[contains(text(), "Retrieving itinerary details")]'
-            ))(driver))
+        try:
+            wait.until(
+                lambda driver: not _sel.expected.visibility_of_element_located((
+                    _sel.By.XPATH,
+                    '//div[contains(text(), "Retrieving itinerary details")]'
+                ))(driver)
+            )
+        except Exception:
+            driver.get_screenshot_as_file('xxx-ita-timeout.png')
+            raise
 
         driver.get_screenshot_as_file(f'004-ita-{idx}-details.png')
-        div, parsed = parse_details(driver)
+        div, parsed = parse_details(driver, Price(price))
         parsed['price'] = Price(price)
         details.append(parsed)
         divs.append(div)
-        return driver, divs, details
         driver.back()
+        try:
+            wait.until(
+                lambda driver: not _sel.expected.visibility_of_element_located((
+                    _sel.By.XPATH,
+                    '//div[contains(text(), "Updating flight info")]'
+                ))(driver)
+            )
+        except Exception:
+            driver.get_screenshot_as_file('xxx-ita-timeout.png')
+            raise
 
-        wait.until(
-            lambda driver: not _sel.expected.visibility_of_element_located((
-                _sel.By.XPATH,
-                '//div[contains(text(), "Updating flight info")]'
-            ))(driver)
-        )
     return driver, divs, details
 
 
@@ -107,7 +133,7 @@ def get_buttons(driver):
             if button.text]
 
 
-def parse_details(driver):
+def parse_details(driver, price):
     details_div = driver.find_element_by_xpath(
         '//div[contains(text(), "Itinerary")]/following-sibling::div'
     )
@@ -127,6 +153,9 @@ def parse_details(driver):
                 base_fare_total=sum(fare['price'] for fare in base_fares),
                 fat=fat,
                 fat_total=sum(surcharge['price'] for surcharge in fat))
+
+    fare['other_total'] = price - fare['base_fare_total'] - fare['fat_total']
+    fare['best_possible'] = fare['base_fare_total'] + fare['other_total']
 
     return details_div, {'out': out, 'return': return_, 'fare': fare}
 
@@ -239,6 +268,68 @@ def click_suggestion(driver, input_):
         if f'({input_})' in suggestion.text:
             suggestion.click()
             break
+
+
+def find_candidate_fares(num_details=5):
+    destinations = [
+        'ATL',  # Atlanta, GA
+        'LAX',  # Los Angeles, CA
+        'ORD',  # Chicago, IL
+        'DFW',  # Dallas/Fort Worth, TX
+        'JFK',  # New York, NY
+        'DEN',  # Denver, CO
+        'SFO',  # San Francisco, CA
+        'LAS',  # Las Vegas, NV
+        'CLT',  # Charlotte, NC
+        'SEA',  # Seattle/Tacoma, WA
+        'PHX',  # Phoenix, AZ
+        'MIA',  # Miami, FL
+        'MCO',  # Orlando, FL
+        'IAH',  # Houston, TX
+        'EWR',  # Newark, NJ
+        'MSP',  # Minneapolis/St. Paul, MN
+        'BOS',  # Boston, MA
+        'DTW',  # Detroit, MI
+        'PHL',  # Philadelphia, PA
+        'LGA',  # New York, NY
+        'FLL',  # Fort Lauderdale, FL
+        'BWI',  # Baltimore, MD/Washington, D.C.
+        'DCA',  # Washington, D.C.
+        'SLC',  # Salt Lake City, UT
+        'MDW',  # Chicago, IL
+        'IAD',  # Washington, D.C.
+        'SAN',  # San Diego, CA
+        'HNL',  # Honolulu, HI
+        'TPA',  # Tampa, FL
+        'PDX',  # Portland, OR
+        'DAL',  # Dallas, TX
+        'STL',  # St. Louis, MO
+        'LIH',  # Lihue, HI
+    ]
+
+    origins = [
+        'MUC',  # Munich
+        'FRA',  # Frankfurt
+        'DUS',  # Düsseldorf
+        'TXL',  # Berlin
+        'HAM',  # Hamburg
+        'SXF',  # Berlin
+        'CGN',  # Cologne/Bonn
+        'STR',  # Stuttgart
+    ]
+
+    driver = _common.get_firefox_driver(width=1280)
+    details = []
+    for origin in origins:
+        for destination in destinations:
+            try:
+                details.extend(search(origin, destination, '12/19/2018',
+                                      '01/04/2019', num_details=num_details,
+                                      driver=driver)[2])
+            except Exception:
+                continue
+
+    return details
 
 
 if __name__ == "__main__":
