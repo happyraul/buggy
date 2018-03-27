@@ -24,19 +24,30 @@ class _sel():
 
 class Query(_typing.NamedTuple):
     destination: str
-    departure_date: str
+    departure: str
     duration_limit: _dt.timedelta = None
     origin: str = 'Munich'
-    outbound_start: _dt.time = None
     latest_arrival: _dt.time = None
 
 
 queries = [
+    # Query(
+    #     destination='Aachen', departure=_dt.datetime(2018, 4, 18, 18),
+    #     duration_limit=_dt.timedelta(seconds=60 * 60 * 6),
+    #     latest_arrival=_dt.datetime(2018, 4, 19, 2)
+    # ),
+
     Query(
-        destination='Aachen', departure_date='15.04.2018',
+        destination='Aachen', departure=_dt.datetime(2018, 4, 12, 18),
         duration_limit=_dt.timedelta(seconds=60 * 60 * 6),
-        outbound_start=_dt.time(hour=7), latest_arrival=_dt.time(hour=18)
-    )
+        latest_arrival=_dt.datetime(2018, 4, 13, 2)
+    ),
+
+    Query(
+        destination='Aachen', departure=_dt.datetime(2018, 4, 19, 18),
+        duration_limit=_dt.timedelta(seconds=60 * 60 * 6),
+        latest_arrival=_dt.datetime(2018, 4, 20, 2)
+    ),
 ]
 
 
@@ -67,16 +78,16 @@ def search(query, driver=None, best=False):
     send_keys(query.destination, id_='js-auskunft-autocomplete-to')
     driver.find_element_by_id('0').click()
 
-    if query.departure_date:
-        send_keys(query.departure_date, name='date', clear=True)
+    if query.departure:
+        send_keys(query.departure.strftime('%d.%m.%Y'), name='date',
+                  clear=True)
         driver.get_screenshot_as_file('000-db.png')
         driver.find_element_by_id('js-auskunft-autocomplete-from').click()
         time_field = driver.find_element_by_name('time')
         for _ in range(5):
             time_field.send_keys(_sel.Keys.BACK_SPACE)
         driver.get_screenshot_as_file('000-db-back.png')
-        outbound_start = query.outbound_start or _dt.time(hour=14)
-        send_keys(outbound_start.strftime('%H:%M'), name='time')
+        send_keys(query.departure.strftime('%H:%M'), name='time')
 
     print(f'Submitting search for `{query.destination}`...')
     driver.get_screenshot_as_file('001-db.png')
@@ -102,10 +113,14 @@ def search(query, driver=None, best=False):
     for result in driver.find_elements_by_class_name('boxShadow'):
         if has_price(result):
             results.append(dict(
-                departure_time=result.find_element_by_xpath(
-                    "tr[@class='firstrow']/td[@class='time']").text.strip(),
-                arrival_time=result.find_element_by_xpath(
-                    "tr[@class='last']/td[@class='time']").text.strip(),
+                departure_time=parse_time(result.find_element_by_xpath(
+                    "tr[@class='firstrow']/td[@class='time']"
+                ).text.strip(), query.departure),
+
+                arrival_time=parse_time(result.find_element_by_xpath(
+                    "tr[@class='last']/td[@class='time']"
+                ).text.strip(), query.departure),
+
                 duration=parse_duration(result),
                 price=parse_price(result)
             ))
@@ -119,7 +134,9 @@ def search(query, driver=None, best=False):
                    if result['duration'] < query.duration_limit]
 
     results = [
-        dict(result, duration=str(result['duration'])) for result in results
+        dict(result, departure_time=str(result['departure_time']),
+             duration=str(result['duration']),
+             arrival_time=str(result['arrival_time'])) for result in results
     ]
 
     if best:
@@ -128,7 +145,15 @@ def search(query, driver=None, best=False):
     return driver, results
 
 
+def parse_time(time, departure):
+    """turn string time into python time"""
+    hour, minute = map(int, time.split(':'))
+    day = departure.day if hour >= departure.hour else departure.day + 1
+    return _dt.datetime(departure.year, departure.month, day, hour, minute)
+
+
 def parse_duration(result):
+    """turn string duration into python timedelta"""
     duration = result.find_element_by_xpath(
         "tr[@class='firstrow']/td[contains(@class, 'duration') "
         "and contains(@class, 'lastrow')]"
@@ -160,7 +185,7 @@ def best_price():
         if query.destination not in results or \
                 results[query.destination]['price'] > result['price']:
             results[query.destination] = result
-            results[query.destination]['date'] = query.departure_date
+            results[query.destination]['date'] = query.departure
     return results
 
 
