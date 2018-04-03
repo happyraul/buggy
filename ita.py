@@ -2,8 +2,27 @@
 import decimal as _decimal
 import functools as _ft
 import re as _re
+import typing as _typing
 
 import common as _common
+
+
+short_flights = {
+    'MAD': ['MAD', 'XTI', 'XOC', 'GDU', 'XOU', 'OLT', 'AVS', 'CEJ', 'XIV', 'XJN'],
+    'SYD': ['WOL', 'NTL', 'BHS', 'OAG', 'DGE', 'CBR', 'MYA', 'TRO', 'DBO', 'TMW', 'PQQ'],
+    'KUL': ['KUL', 'SZB', 'MKZ', 'DUM', 'KUA', 'IPH', 'JHB', 'PKU', 'KTE', 'AEG', 'SIN', 'DTB', 'BTH', 'PEN', 
+            'KNO', 'TGG', 'FLZ', 'TNJ', 'KBR', 'AOR', 'NAW', 'PDG', 'LGK', 'GNS', 'HDY', 'MWK', 'DJB', 'KRC', 
+            'TST', 'TXE', 'LSW', 'MEQ', 'KBV', 'NST', 'HKT', 'PLM', 'PGK', 'BKS', 'NTX', 'BTJ', 'URT', 'PXA', 
+            'USM', 'SBG']
+}
+
+class Query(_typing.NamedTuple):
+    """ITA search query"""
+    origin: str
+    destination: str
+    departure_date: str
+    return_date: str
+
 
 
 class Price():
@@ -50,6 +69,27 @@ class _sel():
     from selenium.webdriver.support.wait import WebDriverWait
 
 
+def multi_city_search(query, num_details=1, driver=None):
+    if driver is None:
+        print('Creating driver...')
+        driver = _common.get_firefox_driver(width=1280)
+    send_keys = _ft.partial(_common.send_keys, driver)
+    click = _ft.partial(_common.click, driver)
+
+    url = 'https://matrix.itasoftware.com/'
+    print(f'Loading `{url}`...')
+    driver.get(url)
+
+    click(xpath='//div[contains(text(), "Multi-city")]', timeout=7)
+    click(xpath='//a[contains(text(), "Add another flight")]')
+    # driver.get_screenshot_as_file('000-ita-load.png')
+
+    # driver.close()
+
+    return driver
+
+
+
 def search(origin, destination, departure_date, return_date, num_details=5,
            driver=None):
     if driver is None:
@@ -70,7 +110,8 @@ def search(origin, destination, departure_date, return_date, num_details=5,
     send_keys(departure_date, id_='cityPair-outDate-0')
     send_keys(return_date, id_='cityPair-retDate-0')
 
-    driver.find_element_by_id('searchButton-0').click()
+    click(id_='searchButton-0')
+
     print(f'Searching for `{origin}` to `{destination}` - '
           f'departing `{departure_date}`, returning `{return_date}`...')
 
