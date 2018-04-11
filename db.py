@@ -22,12 +22,63 @@ class _sel():
 # ]
 
 
+# TODO:
+"""
+* Provide list of unavailable dates - generate list of all weekends between two
+  dates
+
+* Expand departure window to include Saturday morning
+
+* International destinations
+
+* Stop iterating over result rows when we encounter a trip leaving the next
+day (look for date separator)
+"""
+
+
 class Query(_typing.NamedTuple):
     destination: str
-    departure: str
+    departure: str = None
     duration_limit: _dt.timedelta = None
     origin: str = 'Munich'
     latest_arrival: _dt.time = None
+
+
+destinations = [
+    # Query(destination='Berlin', duration_limit=_dt.timedelta(hours=5))
+    # Query(destination='Freiburg', duration_limit=_dt.timedelta(hours=5))
+    # Query(destination='Hamburg', duration_limit=_dt.timedelta(hours=6)),
+    Query(destination='Paris', duration_limit=_dt.timedelta(hours=7)),
+    # Query(destination='Ulm', duration_limit=_dt.timedelta(minutes=110))
+]
+
+
+travel_dates = [
+    _dt.datetime(2018, 6, 1, 18),
+    _dt.datetime(2018, 6, 8, 18),
+    _dt.datetime(2018, 6, 15, 18),
+]
+
+
+def get_queries(trip_duration=2):
+    """ Generate some round trip queries """
+    limit = _dt.timedelta(seconds=60 * 60 * 7)
+    for destination in destinations:
+        for date in travel_dates:
+            return_date = (
+                date + _dt.timedelta(days=trip_duration) -
+                _dt.timedelta(hours=3)
+            )
+            yield (
+                Query(destination=destination.destination, departure=date,
+                      duration_limit=destination.duration_limit,
+                      latest_arrival=date + _dt.timedelta(hours=9)),
+                Query(destination=destination.origin,
+                      origin=destination.destination,
+                      departure=return_date,
+                      duration_limit=destination.duration_limit,
+                      latest_arrival=return_date + _dt.timedelta(hours=9)),
+            )
 
 
 queries = [
@@ -76,7 +127,7 @@ def search(query, driver=None, best=False):
     driver.get('https://bahn.de')
     send_keys(query.origin, id_='js-auskunft-autocomplete-from', timeout=6)
     send_keys(query.destination, id_='js-auskunft-autocomplete-to')
-    driver.find_element_by_id('0').click()
+    driver.find_element_by_class_name('stage').click()
 
     if query.departure:
         send_keys(query.departure.strftime('%d.%m.%Y'), name='date',
@@ -140,7 +191,7 @@ def search(query, driver=None, best=False):
     ]
 
     if best:
-        results = sorted(results, key=_op.itemgetter('price'))[0]
+        results = sorted(results, key=_op.itemgetter('price'))[0] if results else None
 
     return driver, results
 
@@ -182,10 +233,36 @@ def best_price():
     driver = _common.get_chrome_driver()
     for query in queries:
         _, result = search(query, best=True, driver=driver)
+        if not result:
+            continue
+
         if query.destination not in results or \
                 results[query.destination]['price'] > result['price']:
             results[query.destination] = result
             results[query.destination]['date'] = query.departure
+    return results
+
+
+def find_vacation(trip_duration=2):
+    results = {
+        # 'Berlin': 'jun 8, €50'
+        # 'Freiburg': 'jun 8, €20'
+        # 'Hamburg': 'jun 12, €76'
+    }
+    driver = _common.get_chrome_driver()
+    for departure, return_ in get_queries(trip_duration=trip_duration):
+        _, dep_result = search(departure, best=True, driver=driver)
+        _, ret_result = search(return_, best=True, driver=driver)
+        if not all([dep_result, ret_result]):
+            continue
+
+        total = dep_result['price'] + ret_result['price']
+        if departure.destination not in results or \
+                results[departure.destination]['total'] > total:
+            results[departure.destination] = dict(
+                dep_result, return_=ret_result, total=total,
+                date=departure.departure
+            )
     return results
 
 
