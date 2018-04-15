@@ -8,13 +8,17 @@ import common as _common
 
 
 short_flights = {
-    'MAD': ['MAD', 'XTI', 'XOC', 'GDU', 'XOU', 'OLT', 'AVS', 'CEJ', 'XIV', 'XJN'],
-    'SYD': ['WOL', 'NTL', 'BHS', 'OAG', 'DGE', 'CBR', 'MYA', 'TRO', 'DBO', 'TMW', 'PQQ'],
-    'KUL': ['KUL', 'SZB', 'MKZ', 'DUM', 'KUA', 'IPH', 'JHB', 'PKU', 'KTE', 'AEG', 'SIN', 'DTB', 'BTH', 'PEN', 
-            'KNO', 'TGG', 'FLZ', 'TNJ', 'KBR', 'AOR', 'NAW', 'PDG', 'LGK', 'GNS', 'HDY', 'MWK', 'DJB', 'KRC', 
-            'TST', 'TXE', 'LSW', 'MEQ', 'KBV', 'NST', 'HKT', 'PLM', 'PGK', 'BKS', 'NTX', 'BTJ', 'URT', 'PXA', 
-            'USM', 'SBG']
+    'MAD': ['MAD', 'XTI', 'XOC', 'GDU', 'XOU', 'OLT', 'AVS', 'CEJ', 'XIV',
+            'XJN'],
+    'SYD': ['WOL', 'NTL', 'BHS', 'OAG', 'DGE', 'CBR', 'MYA', 'TRO', 'DBO',
+            'TMW', 'PQQ'],
+    'KUL': ['SZB', 'MKZ', 'DUM', 'KUA', 'IPH', 'JHB', 'PKU', 'KTE', 'AEG',
+            'SIN', 'DTB', 'BTH', 'PEN', 'KNO', 'TGG', 'FLZ', 'TNJ', 'KBR',
+            'AOR', 'NAW', 'PDG', 'LGK', 'GNS', 'HDY', 'MWK', 'DJB', 'KRC',
+            'TST', 'TXE', 'LSW', 'MEQ', 'KBV', 'NST', 'HKT', 'PLM', 'PGK',
+            'BKS', 'NTX', 'BTJ', 'URT', 'PXA', 'USM', 'SBG']
 }
+
 
 class Query(_typing.NamedTuple):
     """ITA search query"""
@@ -22,7 +26,6 @@ class Query(_typing.NamedTuple):
     destination: str
     departure_date: str
     return_date: str
-
 
 
 class Price():
@@ -79,15 +82,51 @@ def multi_city_search(query, num_details=1, driver=None):
     url = 'https://matrix.itasoftware.com/'
     print(f'Loading `{url}`...')
     driver.get(url)
+    driver.get_screenshot_as_file('000-ita-load.png')
 
     click(xpath='//div[contains(text(), "Multi-city")]', timeout=7)
     click(xpath='//a[contains(text(), "Add another flight")]')
-    # driver.get_screenshot_as_file('000-ita-load.png')
+
+    # input itinerary
+    send_keys(query.origin, xpath=(
+        '//div[contains(text(), "Flight 1")]'
+        '/parent::div'
+        '/following-sibling::div'
+        '//input'))
+    click_suggestion(driver, query.origin)
+    driver.get_screenshot_as_file('001-ita-mc-origin.png')
+
+    send_keys(query.destination, xpath=(
+        '//div[contains(text(), "Flight 1")]'
+        '/parent::div'
+        '/following-sibling::div'
+        '/following-sibling::div'
+        '/following-sibling::div'
+        '//input'))
+    click_suggestion(driver, query.destination)
+    driver.get_screenshot_as_file('002-ita-mc-dest.png')
+
+    # send_keys(query.destination, xpath=(
+    #     '//div[contains(text(), "Flight 2")]'
+    #     '/parent::div'
+    #     '/following-sibling::div'
+    #     '//input'))
+    # click_suggestion(driver, query.destination)
+    # driver.get_screenshot_as_file('003-ita-mc-return-origin.png')
+
+    send_keys(query.origin, xpath=(
+        '//div[contains(text(), "Flight 2")]'
+        '/parent::div'
+        '/following-sibling::div'
+        '/following-sibling::div'
+        '/following-sibling::div'
+        '//input'))
+    click_suggestion(driver, query.origin)
+    driver.get_screenshot_as_file('005-ita-mc-input.png')
 
     # driver.close()
 
     return driver
-
 
 
 def search(origin, destination, departure_date, return_date, num_details=5,
@@ -96,6 +135,7 @@ def search(origin, destination, departure_date, return_date, num_details=5,
         print('Creating driver...')
         driver = _common.get_firefox_driver(width=1280)
     send_keys = _ft.partial(_common.send_keys, driver)
+    click = _ft.partial(_common.click, driver)
 
     url = 'https://matrix.itasoftware.com/'
     print(f'Loading `{url}`...')
@@ -118,9 +158,11 @@ def search(origin, destination, departure_date, return_date, num_details=5,
     driver.get_screenshot_as_file('001-ita-search-begin.png')
     wait = _sel.WebDriverWait(driver, timeout=60)
     try:
-        wait.until(lambda driver: not _sel.expected.visibility_of_element_located(
-            (_sel.By.XPATH, '//div[contains(text(), "Searching for flights")]')
-        )(driver))
+        wait.until(
+            lambda driver: not _sel.expected.visibility_of_element_located((
+                _sel.By.XPATH,
+                '//div[contains(text(), "Searching for flights")]'
+            ))(driver))
     except Exception:
         driver.get_screenshot_as_file('xxx-ita-timeout.png')
         raise

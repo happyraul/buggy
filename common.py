@@ -32,22 +32,37 @@ get_firefox_driver = _ft.partial(get_driver, 'firefox')
 get_chrome_driver = _ft.partial(get_driver, 'chrome')
 
 
-# TODO: add decorator that provides the function the correct selector value and finder function
-def send_keys(driver, value, id_=None, name=None, timeout=None, clear=False):
+def send_keys(driver, value, id_=None, name=None, xpath=None, timeout=None,
+              clear=False):
     """Send the value as input to the field identified by id_ or name.
     Optionally, wait for the input to become visible, and/or clear it first"""
+    target = id_ or name or xpath
+
+    if id_:
+        target = id_
+        selector = _sel.By.ID
+        finder = driver.find_element_by_id
+    elif name:
+        target = name
+        selector = _sel.By.NAME
+        finder = driver.find_element_by_name
+    else:
+        target = xpath
+        selector = _sel.By.XPATH
+        finder = driver.find_element_by_xpath
+
+    _send_keys(driver, value, selector, finder, target, timeout, clear)
+
+
+def _send_keys(driver, value, selector, finder, target, timeout, clear):
     if timeout:
         wait = _sel.WebDriverWait(driver, timeout=timeout)
-        selector = _sel.By.ID if id_ else _sel.By.NAME
         expectation = _sel.expected.visibility_of_element_located(
-            (selector, id_ or name)
+            (selector, target)
         )
         field = wait.until(expectation)
     else:
-        if id_:
-            field = driver.find_element_by_id(id_)
-        else:
-            field = driver.find_element_by_name(name)
+        field = finder(target)
 
     if clear:
         field.clear()
@@ -67,6 +82,5 @@ def click(driver, id_=None, xpath=None, timeout=None):
             element = driver.find_element_by_id(id_)
         else:
             element = driver.find_element_by_xpath(xpath)
-        
 
     element.click()
